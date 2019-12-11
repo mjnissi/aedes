@@ -1,0 +1,6 @@
+			/*	3D ISIS table		*/
+t1 = 1 0 1 0 1 0 1 0                    /*first inversion rf*/
+t2 = 1 1 0 0 1 1 0 0                   /*second inversion rf*/
+t3 = 1 1 1 1 0 0 0 0                    /*third inversion rf*/
+t4 = 2 0 0 2 0 2 2 0                    /*receiver phase*/
+
