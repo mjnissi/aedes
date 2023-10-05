@@ -44,11 +44,10 @@ function DATA = aedes_readbruker(filename,varargin)
 %
 %        Property:        Value:                Description:
 %        *********        ******                ************
-%        'Return'      :  [{1}| 2 | 3 | 4 | 5 ] % 1=return only ftdata (default)
+%        'Return'      :  [ {1} | 2 | 3 | 4 ]   % 1=return only ftdata (default)
 %                                               % 2=return only k-space
 %                                               % 3=return both ftdata & kspace
 %                                               % 4=return raw kspace
-%                                               % 5=return complex ftdata & kspace (SumOfSquares off)
 %
 %        'wbar'        : [ {'on'} | 'off' ]     % Show/hide waitbar
 %
@@ -109,34 +108,13 @@ function DATA = aedes_readbruker(filename,varargin)
 %
 % This program is provided AS IS with NO WARRANTY OF ANY KIND, INCLUDING THE
 % WARRANTY OF DESIGN, MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
-% 
-% 
-% 
-%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%EDITS, Tuomainen, TV
-%Department of Applied Physics, University of Eastern Finland 2020
-
-%Added check with number of receivers to number of repetitions on line ~1030
-%To ensure that RAREVTR data is correctly read (not
-%averaged over number of reps), tvt2020
-
-%changed 3 to length(ks_sz) TVT2020, and 1:length(ks_sz) to padSize
-%on line  ~~998 changed
-%from     any(padSize>ks_sz(1:3))
-%to       any(padSize(1:min(length(ks_sz),3))>ks_sz(1:min(length(ks_sz),3)))
-%the 1: in 1:min(length(ks_sz),3)) was added such that MGE acq can be read
-%without the 1:, the RAREVTR acq were read correctly tho.
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
 
 % Defaults
 DATA = [];
 isRawData = true;
 Dat.showWbar = true;
 Dat.precision = 'double';
-Dat.return = 3;
+Dat.return = 1;
 Dat.zerofill = 'auto';
 Dat.SumOfSquares = 1;
 Dat.Force4D = true;
@@ -221,14 +199,10 @@ for ii=1:2:length(varargin)
 		case 'return'
 			if ~isnumeric(value) || ~isscalar(value) || isempty(value) || ...
 					isnan(value) || ~isreal(value) || (value-floor(value)) ~= 0 || ...
-					value < 1 || value > 5
-				error('Invalid return value. Return value can be an integer in the range 1..5')
+					value < 1 || value > 4
+				error('Invalid return value. Return value can be an integer in the range 1..4')
 			end
 			Dat.return = value;
-            if value==5
-                Dat.SumOfSquares = 2;
-                warning('Complex image data requested, SumOfSquares turned off (value 2)')
-            end
 		case 'force_4d'
 			if strcmpi(value,'on')
 				Dat.Force4D = true;
@@ -316,12 +290,7 @@ DATA.HDR.FileHeader = hdr;
 DATA.HDR.BlockHeader = [];
 DATA.HDR.fname = [fn,fe];
 DATA.HDR.fpath = [fp,filesep];
-if Dat.return == 5
-    DATA.FTDATA = abs(data);
-    DATA.FTDATACOMPLEX = data;
-else
-    DATA.FTDATA = data;
-end
+DATA.FTDATA = data;
 if Dat.return == 1
 	DATA.KSPACE = [];
 	clear kspace;
@@ -554,8 +523,8 @@ if isempty(kspace)
 end
 
 % Fourier transform k-space
-if any(Dat.return==[1 3 5]) && ~Dat.UseCustomRecon
-	[data,msg,kspace] = l_doFFT(kspace,hdr,Dat);
+if any(Dat.return==[1 3]) && ~Dat.UseCustomRecon
+	[data,msg] = l_doFFT(kspace,hdr,Dat);
 	if isempty(data)
 		kspace = [];
 		data = [];
@@ -662,8 +631,6 @@ if isVisuPars
 			isDataComplex = true;
 		elseif strcmpi(hdr.visu_pars.VisuCoreFrameType,'MAGNITUDE_IMAGE')
 			isDataComplex = false;
-        elseif strcmpi(hdr.visu_pars.VisuCoreFrameType,'REAL_IMAGE')
-            isDataComplex = false;
 		else
 			msg = sprintf('Unknown image type "%s".',hdr.visu_pars.VisuCoreFrameType);
 			return
@@ -817,7 +784,7 @@ if nDims == 1
 end
 
 % Handle EPI data
-if strfind(lower(hdr.acqp.PULPROG),'epi')    
+if strncmpi(hdr.acqp.PULPROG,'EPI',3)
 	kspace = [];
 	msg = 'EPI reconstruction is not supported.';
 	return
@@ -828,7 +795,6 @@ end
 NI = hdr.acqp.NI; % Number of objects
 NSLICES = hdr.acqp.NSLICES; % Number of slices
 NR = hdr.acqp.NR; % Number of repetitions
-NECHOES = hdr.acqp.NECHOES; % Number of echoes
 phase_factor = hdr.acqp.ACQ_phase_factor; % scans belonging to a single image
 im_size = hdr.acqp.ACQ_size;im_size(1)=im_size(1)/2;
 order = hdr.acqp.ACQ_obj_order;
@@ -847,24 +813,19 @@ if isempty(pe1_table) && isempty(pe2_table)
 	usePeTable = false;
 end
 
-
 % Reshape data so that all echoes are in correct planes
 if nDims == 2
 	% Handle 2D data
-    rosize = numel(kspace)/nRcvrs/NI/im_size(2)/NR;
-	kspace = reshape(kspace,rosize,...
+	kspace = reshape(kspace,im_size(1),...
 		nRcvrs,phase_factor,NI,im_size(2)/phase_factor,NR);
 	kspace = permute(kspace,[1 3 5 4 6 2]);
-	kspace = reshape(kspace,rosize,im_size(2),NI,NR,nRcvrs);
-    kspace = kspace(1:im_size(1),:,:,:,:,:);
+	kspace = reshape(kspace,im_size(1),im_size(2),NI,NR,nRcvrs);
 elseif nDims == 3
 	% Handle 3D data
-    rosize = numel(kspace)/nRcvrs/NI/im_size(2)/im_size(3)/NR;
-	kspace = reshape(kspace,rosize,...
-		nRcvrs,phase_factor,NI,im_size(2)/phase_factor,im_size(3),NR);
-	kspace = permute(kspace,[1 3 5 6 4 7 2]);
-	kspace = reshape(kspace,rosize,im_size(2),im_size(3),NI,NR,nRcvrs);
-    kspace = kspace(1:im_size(1),:,:,:,:,:);
+	kspace = reshape(kspace,im_size(1),...
+		nRcvrs,phase_factor,im_size(2)/phase_factor,im_size(3),NR);
+	kspace = permute(kspace,[1 3 4 5 6 2]);
+	kspace = reshape(kspace,im_size(1),im_size(2),im_size(3),NR,nRcvrs);
 else
 	kspace = [];
 	msg = sprintf('The number of dimensions "%d" is not supported.',nDims);
@@ -887,19 +848,7 @@ if nDims == 2
 end
 
 % Permute to correct orientation
-if nDims == 2
-    kspace = flipdim(flipdim(kspace,1),2);
-elseif nDims == 3
-    kspace = flipdim(flipdim(flipdim(kspace,1),2),3);
-end
-
-% Separate slices in case of 2D
-if nDims == 2
-    kspace = reshape(kspace,im_size(1),im_size(2),NI/NSLICES,NSLICES,NR,nRcvrs);
-    kspace = permute(kspace,[1 2 4 3 5 6]);
-end
-
-
+kspace = flipdim(flipdim(kspace,1),2);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Check that the required reconstruction parameters are found in acqp
@@ -940,7 +889,7 @@ param = fieldnames(hdr.acqp);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Fourier transform data 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function [data,msg,kspace] = l_doFFT(kspace,hdr,Dat)
+function [data,msg] = l_doFFT(kspace,hdr,Dat)
 
 data = [];
 msg = '';
@@ -961,11 +910,6 @@ end
 
 % Get number of receivers
 nRcvrs = size(kspace,5);
-%THIS MAY BE ACTUALLY PROBLEMATIC AS IN RAREVTR THE NR IS CONNECTED TO THIS
-%VALUE! Tuomainen TV 2020 (fixed in line ~1030, nRcvrs ~= NR check)
-
-%keyboard;
-
 
 % Do Zero filling if requested
 if any(AcqType == [2 3])
@@ -979,33 +923,21 @@ if any(AcqType == [2 3])
 			end
 			if AcqType==2
 				% 2D data
-				padSize = round([hdr.acqp.ACQ_size(1)/2 ...
+				padSize = [hdr.acqp.ACQ_size(1)/2 ...
 					hdr.acqp.ACQ_size(1)/2*(fov2/fov1) ...
-					size(kspace,3)]);
+					size(kspace,3)];
 			elseif AcqType==3
 				% 3D data
-				padSize = round([hdr.acqp.ACQ_size(1)/2 ...
+				padSize = [hdr.acqp.ACQ_size(1)/2 ...
 					hdr.acqp.ACQ_size(1)/2*(fov2/fov1) ...
-					hdr.acqp.ACQ_size(1)/2*(fov3/fov1)]);
-            end
-
-            
-          %  keyboard;
-            % MJN 01/2021: check if padSize vs. kspace size are "almost the same" and
-            % don't pad if they are. Let's say, if difference is under 1%
-            ksz=size(kspace);
-            ksz=ksz(1:numel(padSize));
-            if (1-mean(ksz./padSize))<0.01
-                disp('Note -- padsize vs. voxel size almost equal -- NOT PADDING');
-                padSize=ksz;
-            end
-                
+					hdr.acqp.ACQ_size(1)/2*(fov3/fov1)];
+			end
 		case 'on'
 			% Zeropad to square
 			if AcqType==1
-				padSize = round(hdr.acqp.ACQ_size(1)/2);
+				padSize = hdr.acqp.ACQ_size(1)/2;
 			elseif AcqType==2
-				padSize = round(ones(1,2)*hdr.acqp.ACQ_size(1)/2);
+				padSize = ones(1,2)*hdr.acqp.ACQ_size(1)/2;
 				padSize(3) = size(kspace,3);
 			else
 				padSize = ones(1,3)*hdr.acqp.ACQ_size(1)/2;
@@ -1023,94 +955,29 @@ if any(AcqType == [2 3])
 	end
 	
 	% Pad with zeros
-	% ks_sz = [size(kspace,1) size(kspace,2) size(kspace,3)];
-    ks_sz = size(kspace);
-	if any(padSize(1:min(length(ks_sz),3))>ks_sz(1:min(length(ks_sz),3))) %TVT2020
-		% kspace(padSize(1),padSize(2),padSize(3))=0;
-        
-        ks_sz1 = ks_sz;
-        ks_sz1(1:3) = padSize;
-        halfpad = (ks_sz1(1:3)-ks_sz(1:3))/2;
-        kspace1 = complex(zeros(ks_sz1));
-        kspace1(1+floor(halfpad(1)):padSize(1)-ceil(halfpad(1)), ...
-            1+floor(halfpad(2)):padSize(2)-ceil(halfpad(2)), ...
-            1+floor(halfpad(3)):padSize(3)-ceil(halfpad(3)),:,:,:,:,:) = kspace;
-        kspace = kspace1;
-        clear kspace1
+	ks_sz = [size(kspace,1) ...
+		size(kspace,2) ...
+		size(kspace,3)];
+	if any(padSize>ks_sz)
+		kspace(padSize(1),padSize(2),padSize(3))=0;
 	end
 end
 
-%keyboard;
-
-% Shift FOV to correct position using Fourier shift theorem
-FOV = hdr.method.PVM_Fov;
-matrix = hdr.method.PVM_Matrix;
-FOVcenter = [hdr.method.PVM_SPackArrReadOffset hdr.method.PVM_SPackArrPhase1Offset hdr.method.PVM_SPackArrSliceOffset];
-FOVcenter = FOVcenter(1:length(FOV));
-shift = matrix.*FOVcenter./FOV; % FOV shift in pixels
-for ii = 2:length(FOV) % Shift not necessary along read out direction, already accounted for in recorded data
-    if ii == 3 % Sign change appears necessary for 3rd dimension
-        shift(ii) = -shift(ii);
-    end
-    mod1 = ((1:matrix(ii))'-1-floor(matrix(ii)/2))/matrix(ii)*2*pi*round(shift(ii));
-    mod1 = exp(1i*mod1);
-    sizeks = size(kspace);
-    sizeks(ii) = 1;
-    kpermute = 1:length(sizeks);
-    kpermute(1) = ii;
-    kpermute(ii) = 1;
-    mod1 = permute(mod1,kpermute);
-    mod1 = repmat(mod1,sizeks);
-    kspace = kspace.*mod1;
-end
-
-
 % Allocate space for Fourier transformed data
 if nRcvrs>1 && Dat.SumOfSquares==1
-    if hdr.acqp.NR ~= nRcvrs %TVT2020
   data_sz = [padSize,size(kspace,4),size(kspace,5)];
   data = zeros(data_sz,Dat.precision);
-    else %TVT2020,  if the nRcvrs is mistaken in RAREVTR to be multiple receivers,
-        %this has to be compared to the NR (repetitions, which now are with VTR and not averages of same signal...)
-        %(so if nRcvrs == NR)
-        data_sz = [padSize,size(kspace,5),size(kspace,4)];
-        data = zeros(data_sz,Dat.precision);
-    end
 else
   data = zeros(size(kspace),Dat.precision);
 end
 
 
 if AcqType==1
-  data(:,:,:,:,1:size(data,5)) = fftshift(fft(ifftshift(kspace,1),[],1),1);
-  % Output magnitude image unless complex image requested
-  if Dat.return~=5
-      data = abs(data);
-  end
+  data(:,:,:,:,1:size(data,5)) = abs(fftshift(fft(kspace,[],1),1));
 elseif AcqType==2
-  data(:,:,:,:,1:size(data,5)) = fftshift(fftshift(fft(fft(ifftshift(ifftshift(kspace,1),2),[],1),[],2),1),2);
-  % Output magnitude image unless complex image requested
-  if Dat.return~=5
-      data = abs(data);
-  end
+  data(:,:,:,:,1:size(data,5)) = abs(fftshift(fftshift(fft(fft(kspace,[],1),[],2),1),2));
 elseif AcqType==3
-  data(:,:,:,:,1:size(data,5)) = fftshift(fftshift(fftshift(fft(fft(fft(ifftshift(ifftshift(ifftshift(kspace,1),2),3),[],1),[],2),[],3),1),2),3);
-  % Output magnitude image unless complex image requested
-  if Dat.return~=5
-      data = abs(data);
-  end
-end
-
-%if A L L  E C H O E S  are collected with bruker MGE, then the whole thing
-%is flipped with every-other volume. Thus this needs to be fixed;
-
-if isfield(hdr.method,'EchoAcqMode')
-if strcmpi(hdr.method.EchoAcqMode,'allEchoes')
-    warning('aedes_readbruker.m: allEchoes in use, check if volumes are correct');
-    data(:,:,:,2:2:end) = data(end:-1:1,:,:,2:2:end);
-else
-    warning('aedes_readbruker.m: EchoAcqMode exists, check if volumes are correct');
-end
+  data(:,:,:,:,1:size(data,5)) = abs(fftshift(fftshift(fftshift(fft(fft(fft(kspace,[],1),[],2),[],3),1),2),3));
 end
 
 % Calculate sum-of-squares image
@@ -1124,7 +991,6 @@ elseif nRcvrs>1 && Dat.SumOfSquares==2
 		data = reshape(data,size(data,1),size(data,2),size(data,3),size(data,5));
 	end
 end
-
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1181,15 +1047,6 @@ try
 catch
   cd(currentDir);
 end
-
-
-
-
-
-
-
-
-
 
 
 
