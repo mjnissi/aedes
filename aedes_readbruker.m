@@ -176,9 +176,28 @@ else
 	error('Only Bruker FID and 2DSEQ files are supported.');
 end
 
-% Check varargin length
-if rem(length(varargin),2)==1
-	error('Input arguments may only include filename and param/value pairs.')
+%keyboard;
+
+% Check varargin length and check if header only requested
+if strcmpi(varargin{1},'header')
+    % read header only
+    if isRawData
+    	[hdr,msg] = l_ReadHeaderFid(filename);
+    	if isempty(hdr)
+    		error(msg);
+    	end
+
+    else
+    	[hdr,msg] = l_ReadHeader2dseq(filename);
+    	if isempty(hdr)
+    		error(msg);
+    	end
+    end
+    DATA=hdr;
+    return;
+
+elseif rem(length(varargin),2)==1
+    error('Input arguments may only include filename and param/value pairs.')
 end
 
 % Parse varargin
