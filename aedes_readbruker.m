@@ -179,7 +179,7 @@ end
 %keyboard;
 
 % Check varargin length and check if header only requested
-if strcmpi(varargin{1},'header')
+if ~isempty(varargin) && strcmpi(varargin{1},'header')
     % read header only
     if isRawData
     	[hdr,msg] = l_ReadHeaderFid(filename);
