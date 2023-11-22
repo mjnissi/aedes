@@ -16,6 +16,15 @@ function jdx = aedes_readjcamp(filename)
 % See also:
 %       AEDES_READBRUKER, AEDES_DATA_READ, AEDES
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Tuomainen, TV 2019: ADDED try-catch to line 175 onward: aedes could not reshape 
+%the file from bruker PV 6.01 ZTE/UTE(3D) files. This "fix" does not really
+%do much else, as all the info is obtained from acqp, method etc. files so
+%the reco file may not be that necessary.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%addd change to 
+
 jdx = [];
 
 % Prompt for a file if not given as an input argument
@@ -171,10 +180,14 @@ if val(1) == '(' && val(end) == ')'
 		else
 			val_out{ii} = num;
 		end
-	end
+    end
 	
-	
-	out = reshape(val_out,[],nRows).';
+     try       %TT2019 fix for reco files, as there might be some multiline tables (or other stuff) that mess-up the file-read.
+	out = reshape(val_out,[],nRows).'; 
+     catch
+    %caused an error, not divisible
+    out = ''; %make it just empty, does nothing?
+     end
 	return
 end
 
