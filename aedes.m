@@ -2985,7 +2985,8 @@ end
 Dat.Vols = Dat.ImageDim(Dat.DataInd,4);
 Dat.Rcvrs = size(DATA{1}.FTDATA,5);
 Dat.CurrentVol = 1;
-Dat.Slices = [1 1 1];
+% Dat.Slices = [1 1 1];
+Dat.Slices = [ceil(Dat.ImageDim(1)/2), ceil(Dat.ImageDim(2)/2), ceil(Dat.ImageDim(3)/2)];
 
 % Initialize Clim --------------------------------------
 Dat.ScaleMin=[];
@@ -3491,7 +3492,12 @@ l_ResizeFcn([],[])
 % A quick hack option for disabling mouse wheel zooming, which apparently
 % has issues in OSX with magic mouse...
 try
+if ispref('Aedes','DisableMouseWheel')
   Dat.DisableMouseWheel = getpref('Aedes','DisableMouseWheel');
+else
+        Dat.DisableMouseWheel = false;
+        setpref('Aedes','DisableMouseWheel',false);
+    end
 catch
   Dat.DisableMouseWheel = false;
 end
@@ -6256,9 +6262,17 @@ if  strcmpi(get(H.UITOGGLE_CROSSHAIRS,'state'),'on') || ...
 				set([H.CROSSBAR_LN(ii,1),H.CROSSBAR_LN(ii,2)],'buttondownfcn',@l_SetMouseGestures,...
 					'hittest','on')
 				set([H.CROSSBAR_LN(ii,1),H.CROSSBAR_LN(ii,2)],'userdata',H.IM(ii))
-				if length(ROI)>0
-					set(H.CROSSBAR_LN(ii,:),'parent',H.ROIAX(ii,length(ROI)))
-				else
+				if exist('ROI','var') && length(ROI)>0
+                    % keyboard;
+                    % ROIAX is missing _if ROI loaded from command line
+                    % because it is processed later. Let's add a check here
+                    % and see what happens.. mjn 01/2021
+                    if ~isempty(H.ROIAX)
+					            set(H.CROSSBAR_LN(ii,:),'parent',H.ROIAX(ii,length(ROI)))
+				            else
+					            set(H.CROSSBAR_LN(ii,:),'parent',H.IMOVERLAYAX(ii))
+				            end
+        else
 					set(H.CROSSBAR_LN(ii,:),'parent',H.IMOVERLAYAX(ii))
 				end
 			end
@@ -9176,8 +9190,8 @@ end % function l_RoiSave(h,
 
             % Check if rotation or flipping is needed
             if isstruct(tmp.RotateFlip)
-              rotNeeded = ~ismember(Dat.DataRotation,tmp.RotateFlip.Rotate,'rows');
-              flipNeeded = ~ismember(Dat.DataFlip,tmp.RotateFlip.Flip,'rows');
+              rotNeeded = ~ismember(Dat.DataRotation,tmp.RotateFlip.Rotate,'rows','legacy');  % Added 'legacy' -flag  mjn 09/2018
+              flipNeeded = ~ismember(Dat.DataFlip,tmp.RotateFlip.Flip,'rows','legacy');       % Added 'legacy' -flag  mjn 09/2018
               isRotationNeeded = (rotNeeded | flipNeeded);
             else
               if ~isempty(tmp.RotateFlip)
