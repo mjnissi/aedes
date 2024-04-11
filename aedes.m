@@ -2993,12 +2993,19 @@ Dat.ScaleMin=[];
 Dat.ScaleMax=[];
 Dat.OrigClim=[];
 for ii=1:Dat.DataL
-  Dat.ScaleMin(ii) = double(min(min(min(DATA{ii}.FTDATA(:,:,:,Dat.CurrentVol)))));
-  Dat.ScaleMax(ii) = double(max(max(max(DATA{ii}.FTDATA(:,:,:,Dat.CurrentVol)))));
+  DataTempClim = DATA{ii}.FTDATA(:,:,:,Dat.CurrentVol);
+    Dat.ScaleMin(ii) = double(min(min(min(DataTempClim(~isinf(DataTempClim)),[],'omitnan'))));
+  Dat.ScaleMax(ii) = double(max(max(max(DataTempClim(~isinf(DataTempClim)),[],'omitnan'))));
   Dat.OrigClim(ii,:) = [Dat.ScaleMin(ii) Dat.ScaleMax(ii)];
   if diff(Dat.OrigClim(ii,:))==0
     Dat.OrigClim(ii,:) = [0 1];
   end
+if sum(sum(sum(isinf(DataTempClim))))
+        warning(['Data contains Inf. ','n = ',num2str(sum(sum(sum(isinf(DataTempClim)))))]);
+    end
+    if sum(sum(sum(isnan(DataTempClim))))
+        warning(['Data contains NaN. ','n = ',num2str(sum(sum(sum(isnan(DataTempClim)))))]);
+    end
 end
 
 % Detect Matlab version
@@ -3610,9 +3617,13 @@ end
 
 % Change figure window title if necessary
 if Dat.isDataMixed
+try
   set(H.FIG,'Name',['Aedes 1.0 - (' ...
                     DATA{Dat.DataInd}.HDR.fpath,...
                     DATA{Dat.DataInd}.HDR.fname ')'])
+catch
+        warning('Change figure window title failed')
+    end
 end
 
 % Update Info Text
@@ -8971,10 +8982,14 @@ end % function l_RoiSave(h,
           if strcmpi(fe,'.roi')
             tmp=load([f_path,f_name],'-mat');
           else
+try
+                    tmp = nifti2roi([f_path,f_name]);
+                catch
             [tmp_data,msg]=aedes_read_nifti([f_path,f_name]);
             if isempty(tmp_data)
               error(msg)
             else
+
               if ~strcmpi(class(tmp_data.FTDATA),'uint8') || ...
                   min(tmp_data.FTDATA(:))~=0 || max(tmp_data.FTDATA(:))~=1
                 error('Not a valid NIfTI/Analyze75 ROI file.')
@@ -8996,6 +9011,8 @@ end % function l_RoiSave(h,
             %tmp.FileInfo.DataFileName{1} = '';
             %tmp.FileInfo.DataPathName{1} = '';
             clear tmp_data
+end
+
           end
         catch
           h=errordlg({'Could not load ROI file',['"',f_path,f_name,'"'],...
