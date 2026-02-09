@@ -137,7 +137,7 @@ fclose(fid);
       continue
     else
       %% Read label
-      ind=find(procpar_str{ii}==' ');
+      ind=find(procpar_str{ii}==' ',1); % find first index of blank
       label=procpar_str{ii}(1:ind-1);
       
       %% Make sure that the characters in the label are compatible with 
